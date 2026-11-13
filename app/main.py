@@ -32,7 +32,7 @@ def create_app(settings: Settings | None = None, kakao: KakaoClient | None = Non
         if kakao is not None:
             app.state.kakao = kakao
         elif settings.kakao_client == "real":
-            app.state.kakao = RealKakaoClient(settings.kakao_rest_api_key)
+            app.state.kakao = RealKakaoClient(settings.kakao_rest_api_key, daily_limit=settings.kakao_daily_limit)
         else:
             app.state.kakao = MockKakaoClient()
             logger.warning("KAKAO_CLIENT=mock: 800m 넘는 구간은 가짜 대중교통 값입니다. 운영에서는 KAKAO_CLIENT=real")

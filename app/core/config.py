@@ -13,6 +13,8 @@ class Settings:
     database_url: str = "sqlite:///./sai_ai.db"
     # mock: 카카오를 부르지 않고 가짜 응답 사용 (뼈대 단계 기본값) / real: 실제 호출
     kakao_client: str = "mock"
+    # 실제 카카오 호출 수 상한(서버 프로세스당 하루). 대중교통 무료 한도는 하루 1,000건
+    kakao_daily_limit: int = 300
     # Swagger(/docs, /openapi.json) 공개 여부. 운영에서는 false 권장
     docs_enabled: bool = True
 
@@ -24,5 +26,6 @@ def load_settings() -> Settings:
         kakao_rest_api_key=os.getenv("KAKAO_REST_API_KEY", ""),
         database_url=os.getenv("DATABASE_URL", "sqlite:///./sai_ai.db"),
         kakao_client=os.getenv("KAKAO_CLIENT", "mock").lower(),
+        kakao_daily_limit=int(os.getenv("KAKAO_DAILY_LIMIT", "300")),
         docs_enabled=os.getenv("DOCS_ENABLED", "true").lower() in ("1", "true", "yes"),
     )

@@ -13,7 +13,7 @@ WALK_DETOUR_FACTOR = 1.3
 SECOND_PLACE_RADIUS_M = 400  # 확정
 SECOND_PLACE_MARGIN = 1.3  # 확정
 SECOND_PLACE_PROB = 0.5  # routeCount=3에만
-MAX_HEAVY_SUM = 4  # 제안값, 확인 필요
+MAX_HEAVY_SUM = 4  # 11/14 확정: 공강이 짧아 heavy 4(ENTERTAINMENT 세부 유형)는 어떤 장소와도 묶지 않음
 REROLL_LIMIT = 3  # 백엔드가 적용, AI는 참고만
 
 # 하드 필터의 "직선 이동시간" 추정용 (800m 초과 구간). 잠정값, 카카오 실측으로 보정 예정.

@@ -262,3 +262,20 @@ def test_subtypes_belong_to_their_category():
     from app.core.constants import SUBTYPE_CATEGORY, SUBTYPE_RULES
 
     assert set(SUBTYPE_CATEGORY) == set(SubType) == set(SUBTYPE_RULES)
+
+
+def test_same_subtype_never_paired():
+    """노래방(2) + 노래방(2)은 heavy 합 4로 통과하지만, 같은 세부 유형이라 메인 2곳이 되지 않는다."""
+    catalog = PlaceCatalog([
+        make_place(1, Category.PLAY, 200, sub_type=SubType.NORAE_BANG),
+        make_place(2, Category.PLAY, 250, sub_type=SubType.NORAE_BANG),
+    ])
+    r = req(routeCount=1, mainPlaceId=1, categories=["PLAY"], freeTimeEndAt="2026-11-16T18:00:00")
+    assert run(r, catalog)[0].routes[0].main_place_count == 1
+
+
+def test_same_category_without_subtype_can_pair():
+    """세부 유형이 없는 카페 + 카페는 이 규칙에 걸리지 않는다."""
+    catalog = PlaceCatalog([make_place(1, Category.CAFE, 200), make_place(2, Category.CAFE, 250)])
+    r = req(routeCount=1, mainPlaceId=1, categories=["CAFE"], freeTimeEndAt="2026-11-16T18:00:00")
+    assert run(r, catalog)[0].routes[0].main_place_count == 2

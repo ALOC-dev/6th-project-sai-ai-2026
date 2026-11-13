@@ -6,6 +6,7 @@ DB는 부르지 않는다. 이동시간은 TravelService(요청 범위)로만 �
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -25,6 +26,9 @@ from app.schemas.recommendations import MoveSegment, RecommendationsRequest, Rou
 from app.services.recommend_places import ScoredPlace, available_minutes
 from app.services.travel import KakaoBudgetExceeded, Leg, Point, TravelService, walk_minutes_for
 from app.services.types import Place, PlaceCatalog, haversine_m
+
+
+logger = logging.getLogger("sai_ai.routes")
 
 
 class PlaceNotFound(Exception):
@@ -221,7 +225,7 @@ def second_place_candidates(
     candidates: list[ScoredPlace],
     used_ids: set[int],
 ) -> list[Place]:
-    """P1 반경 400m 안, heavy 합 ≤ MAX_HEAVY_SUM, 시간 식을 통과하는 P2 후보 (점수순)."""
+    """P1 반경 400m 안, heavy 합 ≤ MAX_HEAVY_SUM, P1과 다른 세부 유형, 시간 식을 통과하는 P2 후보 (점수순)."""
     out = []
     heavy1 = p1.stay_rule.heavy
     walk400 = walk_minutes_for(SECOND_PLACE_RADIUS_M)
@@ -232,6 +236,9 @@ def second_place_candidates(
         if haversine_m(p1.latitude, p1.longitude, p2.latitude, p2.longitude) > SECOND_PLACE_RADIUS_M:
             continue
         if heavy1 + p2.stay_rule.heavy > MAX_HEAVY_SUM:
+            continue
+        # 한 루트에 같은 세부 유형 2곳은 넣지 않는다 (예: 노래방 + 노래방, 11/14 결정)
+        if p1.sub_type is not None and p1.sub_type == p2.sub_type:
             continue
         if remaining < SECOND_PLACE_MARGIN * (walk400 + p2.stay_rule.min_minutes):
             continue
@@ -381,6 +388,12 @@ async def build_routes(
     real_errors = [e for e in errors if not isinstance(e, KakaoBudgetExceeded)]
     if not plans and real_errors:
         raise real_errors[0]
+    if real_errors:
+        # 일부 후보만 카카오 오류로 빠진 경우: 결과는 돌려주되 조용히 묻히지 않게 남긴다
+        logger.warning(
+            "request %s: kakao failed for %d candidate(s), returned %d route(s): %s",
+            req.request_id, len(real_errors), len(plans), type(real_errors[0]).__name__ + ": " + str(real_errors[0]),
+        )
 
     routes = [to_route(req, plan, i + 1) for i, (plan, _, _) in enumerate(plans)]
     for r in routes:

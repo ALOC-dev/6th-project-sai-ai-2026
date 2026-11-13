@@ -6,7 +6,7 @@
 - 기준 문서: 이 파일 + Notion 허브(261113알록페이지)의 9주차 "경로탐색 알고리즘", "백엔드서버와 api 명세 맞추기", 11/8 회의록.
   - 주의(11/13 확인): 11/6에 고친 원본 Notion 페이지는 삭제됐고, 지금 허브에 있는 사본에는 11/6 수정(routeCount=1의 heavy 규칙, STAY_WEIGHT 배분, 가중치 동일 시작)이 빠져 있다. **Notion과 이 파일이 다르면 이 파일이 최신**이고, Notion을 이 파일에 맞춘다.
 - 일정: 12/31까지 주요 기능 + FE/BE 연동. 11/26까지 추천 ERD ↔ AI 명세 정합. PM 보고는 매주 수요일 22:00.
-- 이번 주(10주차) AI 과제: 기본 서버 구현, 추천 알고리즘 뼈대 구현.
+- 10주차 AI 과제(기본 서버, 추천 알고리즘 뼈대)는 11/14 완료, main에 첫 커밋 push. 로컬 장소 DB에는 캠퍼스 주변 실제 장소 30곳이 들어 있다(10절 실행 메모).
 
 ## 1. 하는 일
 
@@ -38,7 +38,8 @@
 | --- | --- |
 | `KAKAO_REST_API_KEY` | 카카오맵 길찾기 REST API 키 (발급 완료, 네이티브 앱 키 아님) |
 | `INTERNAL_API_KEY` | 백엔드 ↔ AI 내부 인증 키 (양쪽 환경변수에 같은 값) |
-| `VWORLD_API_KEY` | 장소 가져오기 스크립트의 주소→좌표 변환 (공공 API) |
+| `SDSC_API_URL`, `SDSC_API_KEY` | 장소 가져오기의 좌표 찾기용 소상공인 상가(상권)정보 API |
+| `VWORLD_API_KEY` | (선택) VWorld 지오코더. 법인 인증이 필요해 지금은 안 씀 |
 | `DATABASE_URL` | AI 전용 DB. 개발 초기 `sqlite:///./sai_ai.db`, 운영은 `mysql+pymysql://<계정>@<호스트>:3306/sai_ai` (백엔드의 jdbc 형식 아님) |
 
 ## 3. 카카오 API 제약 (반드시 지킬 것)
@@ -47,10 +48,12 @@
   - Redis/DB에 카카오 결과를 쌓는 코드를 만들지 않는다. 같은 요청 안에서 메모리로 재사용하는 것만 허용.
   - 장소 데이터는 카카오가 아니라 **자체 장소 DB**(공공데이터 + 팀이 정리한 장소)에서 가져온다.
   - `kakaoPlaceId`와 그 ID로 만든 `placeUrl`은 카카오맵 연결용이라 저장해도 된다 (데브톡 152407).
-- 대중교통 길찾기: `GET https://dapi.kakao.com/v2/routing/publictraffic`. 헤더 `Authorization: KakaoAK {KAKAO_REST_API_KEY}`.
-  - 경로 ID가 없다. `routes[]` 안에 구간별 `path.points`, `totalTime`, `fare`, `transfers`, `landingURL`이 온다.
+- 대중교통 길찾기: `GET https://dapi.kakao.com/v2/routing/publictraffic`. 헤더 `Authorization: KakaoAK {KAKAO_REST_API_KEY}`. 무료 한도 하루 1,000건.
+  - 요청: `start_x`(경도), `start_y`(위도), `end_x`, `end_y` (11/14 실제 호출로 확인).
+  - 응답: 맨 위 `properties.landingURL`, `routes[i].properties`에 `totalTime`(초, 도보 포함)·`totalDistance`(m)·`transfers`·`fare.value`, `routes[i].steps[].path.points`는 **[경도, 위도]** 순서(우리 응답은 [위도, 경도]로 뒤집음). 노선 이름은 `steps[].properties.vehicles[].name`(같은 구간의 노선 후보 목록). 경로 ID는 없다.
 - 도보 길찾기: `/v2/routing/walk`, 경유지 최대 5개.
 - 카카오 호출은 최소화한다(6절). 타임아웃은 짧게 잡고, 실패하면 502로 돌려준다.
+- **실제 호출은 테스트 페이지로 시험할 때만 한다 (11/14 원기님 결정).** 평소 서버는 `KAKAO_CLIENT` 기본값 mock으로 돌고, 실제 호출 서버는 따로 띄운다(10절). 실제 서버는 프로세스당 하루 `KAKAO_DAILY_LIMIT`(기본 300)건을 넘기면 더 부르지 않는다.
 
 ## 4. 자체 장소 DB `sai_ai` (AI 서버 소유)
 
@@ -58,7 +61,11 @@
 - **장소·피드백 원본은 `sai_ai`가 갖는다 (11/13 원기님 결정).** 백엔드 ERD의 `places`·`userPlaceFeedbacks`는 빼거나 placeId 참조용으로 줄이도록 백엔드에 요청한다. 백엔드는 장소 정보를 AI 응답(STAY 구간·places 응답)으로 받고, 피드백은 `/ai/v1/feedback`으로 보낸다.
 - 백엔드 DB(`sai`)와 다른 DB라서 userId·requestId에 외래키를 걸지 않는다.
 - 서버 시작 시 장소 전체를 메모리에 올리고 numpy로 거리·필터를 계산한다. 캠퍼스 반경 2km는 수백~수천 건이라 충분히 빠르다.
-- 데이터: 공공데이터(소상공인시장진흥공단 상가(상권)정보 등)를 스크립트로 적재 + 분위기 태그·가격·영업시간·체류시간은 팀 스프레드시트에서 import. 뼈대 단계는 가짜 장소 30곳으로 시작.
+- 데이터: 공공데이터(소상공인시장진흥공단 상가(상권)정보 등)를 스크립트로 적재 + 분위기 태그·가격·영업시간·체류시간은 팀 스프레드시트에서 import.
+  - 11/14 현재: 원기님이 고른 실제 장소 30곳을 `scripts/import_places.py`로 적재. 입력 형식은 `scripts/places_template.csv`·`places_template_README.md`. 실제 장소 CSV는 레포 밖(`C:\dev\data\places_filled.csv`)에 두고 커밋하지 않는다.
+  - 좌표: 카카오 검색 좌표는 저장 금지라 쓰지 않는다. 상가정보 API(`SDSC_API_URL`, `SDSC_API_KEY`)로 캠퍼스 반경 2km 상가를 받아 도로명주소(도로명+건물번호)가 같은 곳의 좌표를 쓰고, 못 찾으면 OpenStreetMap(건물 번호까지 맞을 때만), 그래도 없으면 CSV의 `latitude`·`longitude`에 직접 넣는다. 청량리역처럼 부지가 큰 곳은 상가정보 좌표가 부지 중심이라 직접 넣었다.
+  - 영업시간이 비어 있으면 '항상 열림'으로 처리되므로 비운 채로 적재하지 않는다(스크립트가 거부). 산책로처럼 항상 열린 곳은 `상시`.
+  - 브레이크타임은 지금 형식에 담지 못한다(하루 한 구간). memo에만 적어 둔다.
 
 | 테이블 | 컬럼 |
 | --- | --- |
@@ -89,7 +96,8 @@
 
 1. **하드 필터**: 모두 만족해야 남는다.
    - 출발지 기준 직선거리 ≤ maxDistance
-   - 1인 가격 ≤ maxPrice
+   - 요청 카테고리 중 하나 (11/14 확정: 점수가 아니라 필터)
+   - 1인 가격(priceMin) ≤ maxPrice
    - 공강 동안 영업 중
    - 수용 인원 ≥ headcount
    - 시간 적합: 직선 이동시간(왕복) + 최소 체류시간 ≤ 쓸 수 있는 시간 T
@@ -107,6 +115,8 @@
 **① 메인 장소 선정**
 - routeCount = 1: `mainPlaceId`가 P1으로 확정. DB에 없으면 404 PLACE_NOT_FOUND.
 - routeCount = 3: 요청 카테고리(1개 이상) 중 **서로 다른 카테고리**에서 1곳씩, 점수 높은 순으로 3곳. 카테고리가 1~2개뿐이면 루트는 3개를 채우되 모두 메인 1곳.
+- 메인 후보가 시간·영업시간 때문에 실패하면 **같은 카테고리의 다음 후보**로 교체한다. 카테고리끼리는 동시에 계산한다.
+- 카카오 오류는 그 후보만 건너뛰고(서버 로그에 경고), 루트를 하나도 못 만들었을 때만 502.
 
 **② 메인 2곳 판단** (P1 기준)
 
@@ -119,6 +129,7 @@
 - routeCount = 3: 카테고리가 3개 이상일 때만, 시간 식과 heavy 규칙을 통과한 루트 중 최대 1개를 `SECOND_PLACE_PROB`(50%) 확률로 메인 2곳.
 - P2는 후보 중 P1 반경 `SECOND_PLACE_RADIUS_M`(400m) 안에서 고른다. 다른 루트의 카테고리와 상관없이 고른다.
 - heavy 규칙: 두 장소의 heavy 합이 `MAX_HEAVY_SUM` 이하일 때만 (7절 표).
+- **같은 세부 유형 금지 (11/14 원기님 결정)**: 한 루트에 같은 `subType`의 장소를 2곳 넣지 않는다(예: 노래방 + 노래방, PC방 + PC방). 세부 유형이 없는 장소끼리(카페 + 카페)는 이 규칙과 상관없다.
 - P2를 고른 뒤 실제 이동시간으로 다시 확인하고, 안 맞으면 메인 1곳으로 되돌린다.
 - 두 곳 중 출발지에 가까운 곳을 먼저 간다.
 - 난수 시드는 `requestId`로 고정한다(재현·디버깅용).
@@ -177,7 +188,9 @@
 | SECOND_PLACE_RADIUS_M | 400 | 확정 |
 | SECOND_PLACE_MARGIN | 1.3 | 확정 |
 | SECOND_PLACE_PROB | 0.5 | routeCount=3에만 |
-| MAX_HEAVY_SUM | 4 (제안) | 원기님 확인 필요 |
+| MAX_HEAVY_SUM | 4 | 11/14 원기님 확정. ENTERTAINMENT 세부 유형(heavy 4)은 어떤 장소와도 묶이지 않는다. 공강이 길지 않아 영화·방탈출·보드게임 뒤에 카페까지 가기는 힘들다고 봄 |
+| MAX_KAKAO_CALLS_PER_REQUEST | 6 | 요청당 카카오 호출 상한 |
+| KAKAO_DAILY_LIMIT | 300 | 환경변수. 실제 서버 프로세스당 하루 상한 |
 | REROLL_LIMIT | 3 | 백엔드가 적용, AI는 참고만 |
 
 카테고리별 값 (초안, PLAY 최소 30분만 확정. heavy 열은 11/13 원기님 확정):
@@ -321,9 +334,9 @@ app/
   services/            # types.py(메모리 장소 모델), recommend_places.py, build_routes.py, travel.py, preference.py
   clients/kakao.py     # 카카오 호출은 여기 한 곳만 (Real/Mock)
 scripts/seed_fake_places.py   # 가짜 장소 30곳
-scripts/import_places.py      # 팀 장소 CSV → DB (좌표는 VWorld 공공 지오코더, 카카오 좌표 저장 금지)
+scripts/import_places.py      # 팀 장소 CSV → DB (좌표는 상가정보 API → OpenStreetMap → 직접 입력, 카카오 좌표 저장 금지)
 scripts/places_template.csv   # 장소 입력 템플릿 (+ places_template_README.md)
-tests/                 # conftest.py, test_api.py, test_algorithm.py
+tests/                 # conftest.py, test_api.py, test_algorithm.py, test_kakao.py, test_import_places.py
 .env.example  requirements.txt  pytest.ini  README.md
 ```
 
@@ -335,15 +348,27 @@ tests/                 # conftest.py, test_api.py, test_algorithm.py
 - 커밋 전에 `.env`, 키 문자열이 diff에 없는지 확인한다.
 - 깃허브에 올리기 전에는 진행 과정·알고리즘·판단 이유를 문서로 정리해 원기님 승인을 먼저 받는다.
 - 브랜치 이름, 커밋 메시지, PR 제목·본문, 파일 이름·내용에 AI 도구 이름을 넣지 않고, 자동 서명 줄(Co-Authored-By 등)도 넣지 않는다.
+- 로컬에서 하는 일 중 GitHub push·PR, 설정 파일 변경, 파일·DB 삭제, 패키지·플러그인 설치, 실제 카카오 호출은 원기님 확인 후에 한다.
+
+### 로컬 실행 메모 (11/14)
+
+| 포트 | 무엇 | 실행 |
+| --- | --- | --- |
+| 8000 | 평소 AI 서버 (카카오 mock) | `.venv/Scripts/uvicorn app.main:app --port 8000` |
+| 8001 | 실제 카카오 AI 서버 | PowerShell: `$env:KAKAO_CLIENT = "real"; .venv/Scripts/uvicorn app.main:app --port 8001` |
+| 5500 | 테스트 페이지 (`C:/dev/test web/serve.py`) | `python serve.py --target http://127.0.0.1:8001` (8000을 보려면 `--target` 생략) |
+
+- `/ai/v1/health` 응답의 `kakaoClient`가 `real`/`mock`을 알려 준다.
+- 장소 다시 넣기: `python -m scripts.import_places <CSV> --dry-run`으로 검사 후 `--replace`.
 
 ## 11. 아직 정해지지 않은 것
 
-- 카테고리·세부 유형별 최소/최대 체류, heavy, STAY_WEIGHT 값과 MAX_HEAVY_SUM (7절 초안, PLAY 30분만 확정)
+- 카테고리·세부 유형별 최소/최대 체류, STAY_WEIGHT 값 (7절 초안, PLAY 30분만 확정. heavy는 11/14 확정)
+- 분위기 태그 30곳 초안 검수 (카카오맵 리뷰 요약을 보고 고른 값)
 - PLACE_LIST_COUNT(잠정 10), CANDIDATE_COUNT(잠정 20)
 - "보여줬는데 선택 안 한 루트 −0.5"를 언제 적용할지 (다른 루트 SELECT가 올 때 / 일정 시간 뒤)
 - 다음 수업 없는 날 규칙(19:00까지, 마지막 장소에서 종료)은 다음 모임 전까지 잠정. 모임에서 확정
 - 배포 위치, base URL, `sai_ai` DB 계정 (지윤님 RDS 생성 후)
-- 디렉터리 구조
 - 백엔드 `places`·`userPlaceFeedbacks`를 빼거나 줄이는 것에 대한 은주님 확인 (AI 원본으로 결정됨, 4절)
 - 시간표 인식(OCR) 명세와 일정
 - (향후 과제, 11/13 원기님) 장소 분위기(moods) 자동 분류 모델. 카테고리는 공공데이터 업종 코드 매핑 + 이름 키워드 규칙으로 하고, 모델은 분위기 태그에 쓴다. 리뷰 등 텍스트 출처의 이용 조건과 팀 라벨 데이터 확보가 먼저.
