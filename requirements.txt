@@ -1,0 +1,14 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+sqlalchemy>=2.0
+httpx>=0.27
+numpy>=1.26
+python-dotenv>=1.0
+# 운영 DB(MySQL)용
+pymysql>=1.1
+# 시간표 인식(다음 단계)용
+opencv-python>=4.9
+
+# 테스트
+pytest>=8

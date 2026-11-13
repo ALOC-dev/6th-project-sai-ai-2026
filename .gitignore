@@ -1,0 +1,26 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# local notes (not for the repo)
+handoff-*.md
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.conda/
+
+# local db
+*.db
+*.sqlite3
+
+# editor
+.vscode/
+.idea/
+
+# 옛 작업 폴더 (시간표 작업 때 정리)
+ai-server/

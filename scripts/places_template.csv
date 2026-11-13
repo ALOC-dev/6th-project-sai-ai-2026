@@ -1,0 +1,4 @@
+﻿name,category,sub_type,road_address,price_min,price_max,moods,mon,tue,wed,thu,fri,sat,sun,capacity,stay_min_minutes,kakao_place_id,memo
+예시카페,CAFE,,서울특별시 동대문구 예시로 1,4000,8000,CALM|COZY,09:00-22:00,09:00-22:00,09:00-22:00,09:00-22:00,09:00-22:00,10:00-20:00,휴무,30,,12345678,예시 행이니 지우고 쓰세요
+예시코인노래방,PLAY,NORAE_BANG,서울특별시 동대문구 예시로 2,3000,8000,NOISY|ENERGETIC,12:00-02:00,12:00-02:00,12:00-02:00,12:00-02:00,12:00-02:00,12:00-02:00,12:00-02:00,20,,,자정 넘기는 영업 예시
+예시산책로,WALK,,서울특별시 동대문구 예시로 3,0,0,CALM|ROMANTIC,상시,상시,상시,상시,상시,상시,상시,,,,항상 열려 있는 곳 예시
